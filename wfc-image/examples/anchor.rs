@@ -1,3 +1,4 @@
+extern crate grid_2d;
 extern crate hashbrown;
 extern crate image;
 extern crate rand;
@@ -6,6 +7,7 @@ extern crate simon;
 extern crate wfc;
 extern crate wfc_image;
 
+use grid_2d::coord_system::XThenYIter;
 use hashbrown::*;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
@@ -61,31 +63,43 @@ impl Args {
 }
 
 struct Forbid {
-    pattern_ids: HashSet<PatternId>,
+    bottom_right_id: PatternId,
+    ids_to_forbid_bottom_right: HashSet<PatternId>,
+    ids_to_forbid_centre: HashSet<PatternId>,
     offset: i32,
 }
 
 impl ForbidPattern for Forbid {
     fn forbid<W: Wrap, R: Rng>(&mut self, fi: &mut ForbidInterface<W>, rng: &mut R) {
         let output_size = fi.wave_size();
-        (0..(output_size.width() as i32))
-            .map(|x| Coord::new(x, output_size.height() as i32 - self.offset as i32))
-            .chain(
-                (0..(output_size.width() as i32)).map(|y| {
-                    Coord::new(output_size.width() as i32 - self.offset as i32, y)
-                }),
-            )
-            .for_each(|coord| {
-                self.pattern_ids.iter().for_each(|&pattern_id| {
-                    fi.forbid_all_patterns_except(coord, pattern_id, rng)
-                        .unwrap();
-                });
-            });
+        let bottom_right_coord = Coord::new(
+            output_size.width() as i32 - self.offset,
+            output_size.height() as i32 - self.offset,
+        );
+        fi.forbid_all_patterns_except(bottom_right_coord, self.bottom_right_id, rng)
+            .unwrap();
+        for coord in XThenYIter::new(output_size) {
+            let delta = coord - bottom_right_coord;
+            if delta.magnitude2() > 2 {
+                for &id in self.ids_to_forbid_bottom_right.iter() {
+                    fi.forbid_pattern(coord, id, rng).unwrap();
+                }
+            }
+            let pad = 8;
+            if coord.x > pad
+                && coord.y > pad
+                && coord.x < output_size.width() as i32 - pad
+                && coord.y < output_size.height() as i32 - pad
+            {
+                for &id in self.ids_to_forbid_centre.iter() {
+                    fi.forbid_pattern(coord, id, rng).unwrap();
+                }
+            }
+        }
     }
 }
 
 fn app(args: Args) -> Result<(), ()> {
-    println!("{}", args.seed);
     let mut rng = XorShiftRng::seed_from_u64(args.seed);
     let mut image_patterns = ImagePatterns::new(
         &args.input_image,
@@ -104,6 +118,26 @@ fn app(args: Args) -> Result<(), ()> {
         .iter()
         .cloned()
         .collect::<HashSet<_>>();
+    let top_left_ids = [
+        Coord::new(0, 0),
+        Coord::new(1, 1),
+        Coord::new(0, 8),
+        Coord::new(0, 32),
+        Coord::new(26, 1),
+        Coord::new(59, 18),
+        Coord::new(14, 59),
+        Coord::new(7, 1),
+    ]
+    .iter()
+    .flat_map(|&coord| id_grid.get_checked(coord).iter().cloned())
+    .collect::<HashSet<_>>();
+    for &empty_id in id_grid.get_checked(Coord::new(8, 8)).iter() {
+        image_patterns.pattern_mut(empty_id).clear_count();
+    }
+    let bottom_right_id = *id_grid
+        .get_checked(bottom_right_coord)
+        .get(Orientation::Original)
+        .unwrap();
     if !args.allow_corner {
         bottom_right_ids.iter().for_each(|&pattern_id| {
             image_patterns.pattern_mut(pattern_id).clear_count();
@@ -114,7 +148,9 @@ fn app(args: Args) -> Result<(), ()> {
     let mut context = Context::new();
     let result = {
         let forbid = Forbid {
-            pattern_ids: bottom_right_ids,
+            bottom_right_id,
+            ids_to_forbid_bottom_right: bottom_right_ids,
+            ids_to_forbid_centre: top_left_ids,
             offset: bottom_right_offset as i32,
         };
         let mut run = RunBorrow::new_forbid(
