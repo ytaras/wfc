@@ -74,31 +74,6 @@ impl Orientation {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct OrientationTable<T> {
-    table: [Option<T>; NUM_ORIENTATIONS],
-}
-
-impl<T> OrientationTable<T> {
-    pub fn new() -> Self {
-        Self {
-            table: [None, None, None, None, None, None, None, None],
-        }
-    }
-    pub fn get(&self, orientation: Orientation) -> Option<&T> {
-        self.table[orientation as usize].as_ref()
-    }
-    pub fn get_mut(&mut self, orientation: Orientation) -> Option<&mut T> {
-        self.table[orientation as usize].as_mut()
-    }
-    pub fn insert(&mut self, orientation: Orientation, value: T) {
-        self.table[orientation as usize] = Some(value);
-    }
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
-        self.table.iter().filter_map(|t| t.as_ref())
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;

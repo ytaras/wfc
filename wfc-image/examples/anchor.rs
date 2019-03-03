@@ -1,3 +1,4 @@
+extern crate grid_2d;
 extern crate hashbrown;
 extern crate image;
 extern crate rand;
@@ -6,6 +7,7 @@ extern crate simon;
 extern crate wfc;
 extern crate wfc_image;
 
+use grid_2d::coord_system::XThenYIter;
 use hashbrown::*;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
@@ -61,26 +63,36 @@ impl Args {
 }
 
 struct Forbid {
-    pattern_ids: HashSet<PatternId>,
+    bottom_right_id: PatternId,
+    bottom_id: PatternId,
+    right_id: PatternId,
     offset: i32,
 }
 
 impl ForbidPattern for Forbid {
     fn forbid<W: Wrap, R: Rng>(&mut self, fi: &mut ForbidInterface<W>, rng: &mut R) {
         let output_size = fi.wave_size();
-        (0..(output_size.width() as i32))
-            .map(|x| Coord::new(x, output_size.height() as i32 - self.offset as i32))
-            .chain(
-                (0..(output_size.width() as i32)).map(|y| {
-                    Coord::new(output_size.width() as i32 - self.offset as i32, y)
-                }),
-            )
-            .for_each(|coord| {
-                self.pattern_ids.iter().for_each(|&pattern_id| {
-                    fi.forbid_all_patterns_except(coord, pattern_id, rng)
-                        .unwrap();
-                });
-            });
+        let bottom_right_coord = Coord::new(
+            output_size.width() as i32 - self.offset,
+            output_size.height() as i32 - self.offset,
+        );
+        for x in 0..bottom_right_coord.x {
+            let coord = Coord::new(x, bottom_right_coord.y);
+            fi.forbid_all_patterns_except(coord, self.bottom_id, rng)
+                .unwrap();
+        }
+        for y in 0..bottom_right_coord.y {
+            let coord = Coord::new(bottom_right_coord.x, y);
+            //            fi.forbid_all_patterns_except(coord, self.right_id, rng)
+            //                .unwrap();
+        }
+        fi.forbid_all_patterns_except(bottom_right_coord, self.bottom_right_id, rng)
+            .unwrap();
+        for coord in XThenYIter::new(output_size) {
+            if coord != bottom_right_coord {
+                fi.forbid_pattern(coord, self.bottom_right_id, rng).unwrap();
+            }
+        }
     }
 }
 
@@ -99,22 +111,40 @@ fn app(args: Args) -> Result<(), ()> {
         input_size.width() as i32 - bottom_right_offset as i32,
         input_size.height() as i32 - bottom_right_offset as i32,
     );
-    let bottom_right_ids = id_grid
+    let bottom_right_coord = Coord::new(
+        input_size.width() as i32 - bottom_right_offset as i32,
+        input_size.height() as i32 - bottom_right_offset as i32,
+    );
+    let bottom_coord =
+        Coord::new(0, input_size.height() as i32 - bottom_right_offset as i32);
+    let right_coord =
+        Coord::new(input_size.width() as i32 - bottom_right_offset as i32, 0);
+    let bottom_right_id = *id_grid
         .get_checked(bottom_right_coord)
-        .iter()
-        .cloned()
-        .collect::<HashSet<_>>();
-    if !args.allow_corner {
-        bottom_right_ids.iter().for_each(|&pattern_id| {
-            image_patterns.pattern_mut(pattern_id).clear_count();
-        });
+        .get(Orientation::Original)
+        .unwrap();
+    let bottom_id = *id_grid
+        .get_checked(bottom_coord)
+        .get(Orientation::Original)
+        .unwrap();
+    let right_id = *id_grid
+        .get_checked(right_coord)
+        .get(Orientation::Original)
+        .unwrap();
+    println!("{} {}", bottom_id, right_id);
+    println!("{:?}", image_patterns.pattern(bottom_id));
+    println!("{:?}", image_patterns.pattern(right_id));
+    for &id in &[bottom_right_id, bottom_id, right_id] {
+        image_patterns.pattern_mut(id).clear_count();
     }
     let global_stats = image_patterns.global_stats();
     let mut wave = Wave::new(args.output_size);
     let mut context = Context::new();
     let result = {
         let forbid = Forbid {
-            pattern_ids: bottom_right_ids,
+            bottom_right_id,
+            bottom_id,
+            right_id,
             offset: bottom_right_offset as i32,
         };
         let mut run = RunBorrow::new_forbid(
@@ -126,6 +156,8 @@ fn app(args: Args) -> Result<(), ()> {
         );
         run.collapse_retrying(NumTimes(args.retries), &mut rng)
     };
+    let cell = wave.grid().get_checked(Coord::new(12, 12));
+    println!("{:?}", cell.chosen_pattern_id().unwrap());
     match result {
         Err(_) => {
             eprintln!("Too many contradictions!");

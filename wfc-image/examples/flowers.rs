@@ -69,10 +69,10 @@ fn main() {
         None
     };
     let start_time = ::std::time::Instant::now();
-    let id_grid = image_patterns.id_grid_original_orientation();
+    let id_grid = image_patterns.id_grid();
     let bottom_left_corner_coord =
         Coord::new(0, image_patterns.grid().size().y() as i32 - 1);
-    let bottom_left_corner_id = *id_grid.get_checked(bottom_left_corner_coord);
+    let &(bottom_left_corner_id, _) = id_grid.get_checked(bottom_left_corner_coord);
     let sprout_id = *id_grid.get_checked(Coord::new(7, 21));
     let flower_id = *id_grid.get_checked(Coord::new(4, 1));
     image_patterns

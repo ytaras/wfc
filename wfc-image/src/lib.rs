@@ -9,7 +9,6 @@ use grid_2d::Grid;
 use image::{DynamicImage, Rgba, RgbaImage};
 use rand::Rng;
 use std::num::NonZeroU32;
-use wfc::orientation::OrientationTable;
 pub use wfc::orientation::{self, Orientation};
 use wfc::overlapping::{OverlappingPatterns, Pattern};
 use wfc::retry as wfc_retry;
@@ -120,12 +119,8 @@ impl ImagePatterns {
         self.overlapping_patterns.grid()
     }
 
-    pub fn id_grid(&self) -> Grid<OrientationTable<PatternId>> {
+    pub fn id_grid(&self) -> &Grid<(PatternId, Orientation)> {
         self.overlapping_patterns.id_grid()
-    }
-
-    pub fn id_grid_original_orientation(&self) -> Grid<PatternId> {
-        self.overlapping_patterns.id_grid_original_orientation()
     }
 
     pub fn pattern(&self, pattern_id: PatternId) -> &Pattern {
