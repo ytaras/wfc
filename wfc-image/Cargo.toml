@@ -15,10 +15,10 @@ wfc = { path = "../wfc", version = "0.8" }
 image = "0.21"
 coord_2d = "0.2"
 grid_2d = "0.12"
-rand = "0.6"
+rand = "0.7"
 
 [dev-dependencies]
-rand_xorshift = "0.1"
+rand_xorshift = "0.2"
 simon = "0.2"
 pixel_grid = "0.5"
 hashbrown = "0.1"
